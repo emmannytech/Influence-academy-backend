@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  creator
+  client
+  admin
+}
+
+enum CreatorStatus {
+  draft
+  submitted
+  under_review
+  approved
+  rejected
+}
+
+enum ClientType {
+  brand
+  agency
+}
+
+model User {
+  id         String   @id @default(uuid())
+  supabaseId String   @unique @map("supabase_id")
+  email      String   @unique
+  role       UserRole
+  isVerified Boolean  @default(false) @map("is_verified")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  creator Creator?
+  client  Client?
+
+  @@map("users")
+}
+
+model Creator {
+  id              String        @id @default(uuid())
+  userId          String        @unique @map("user_id")
+  fullName        String?       @map("full_name")
+  dateOfBirth     DateTime?     @map("date_of_birth")
+  country         String?
+  city            String?
+  location        String?
+  contactNumber   String?       @map("contact_number")
+  email           String?
+  bio             String?
+  niches          String[]      @default([])
+  socialHandles   Json?         @map("social_handles")
+  status          CreatorStatus @default(draft)
+  rejectionReason String?       @map("rejection_reason")
+  adminNotes      String?       @map("admin_notes")
+  submittedAt     DateTime?     @map("submitted_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("creators")
+}
+
+model Client {
+  id                String      @id @default(uuid())
+  userId            String      @unique @map("user_id")
+  companyName       String?     @map("company_name")
+  companyType       ClientType? @map("company_type")
+  companyWebsite    String?     @map("company_website")
+  industry          String?
+  contactPersonName String?     @map("contact_person_name")
+  contactEmail      String?     @map("contact_email")
+  contactPhone      String?     @map("contact_phone")
+  country           String?
+  officeAddress     String?     @map("office_address")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("clients")
+}
