@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { AppModule } from '../src/app.module';
@@ -25,6 +26,19 @@ async function bootstrap() {
       }),
     );
     app.useGlobalFilters(new AllExceptionsFilter());
+
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Influence Academy API')
+      .setDescription(
+        'Backend API for the Influence Academy influencer marketing platform',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const documentFactory = () =>
+      SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, documentFactory);
+
     await app.init();
   }
   return app;
