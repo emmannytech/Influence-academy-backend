@@ -18,8 +18,13 @@ async function bootstrap() {
   if (process.env.NODE_ENV === 'production' && !corsOrigin) {
     throw new Error('CORS_ORIGIN must be set in production');
   }
+  const origin =
+    corsOrigin ||
+    'http://localhost:5173,https://influence-academy-frontend.vercel.app';
   app.enableCors({
-    origin: corsOrigin || 'http://localhost:5173',
+    origin: origin.includes(',')
+      ? origin.split(',').map((o) => o.trim())
+      : origin,
     credentials: true,
   });
 

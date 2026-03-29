@@ -14,8 +14,13 @@ async function bootstrap() {
     app.useLogger(app.get(Logger));
     app.setGlobalPrefix('api/v1');
     app.use(helmet());
+    const corsOrigin =
+      process.env.CORS_ORIGIN ||
+      'http://localhost:5173,https://influence-academy-frontend.vercel.app';
     app.enableCors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      origin: corsOrigin.includes(',')
+        ? corsOrigin.split(',').map((o) => o.trim())
+        : corsOrigin,
       credentials: true,
     });
     app.useGlobalPipes(
@@ -37,7 +42,14 @@ async function bootstrap() {
       .build();
     const documentFactory = () =>
       SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('docs', app, documentFactory);
+    SwaggerModule.setup('docs', app, documentFactory, {
+      customCssUrl:
+        'https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui.css',
+      customJs: [
+        'https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui-bundle.js',
+        'https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui-standalone-preset.js',
+      ],
+    });
 
     await app.init();
   }
