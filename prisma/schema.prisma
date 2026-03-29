@@ -27,6 +27,55 @@ enum ClientType {
   agency
 }
 
+enum NotificationType {
+  info
+  success
+  warning
+  error
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  declined
+}
+
+enum CampaignStatus {
+  draft
+  submitted
+  active
+  completed
+  rejected
+}
+
+enum SetupCategory {
+  country
+  city
+  niche
+  platform
+  industry
+}
+
+model SetupItem {
+  id        String        @id @default(uuid())
+  category  SetupCategory
+  label     String
+  value     String
+  isActive  Boolean       @default(true) @map("is_active")
+  sortOrder Int           @default(0) @map("sort_order")
+  parentId  String?       @map("parent_id")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  parent   SetupItem?  @relation("SetupItemParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children SetupItem[] @relation("SetupItemParent")
+
+  @@unique([category, value, parentId])
+  @@index([category, isActive, sortOrder])
+  @@index([parentId])
+  @@map("setup_items")
+}
+
 model User {
   id         String   @id @default(uuid())
   supabaseId String   @unique @map("supabase_id")
@@ -36,8 +85,9 @@ model User {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  creator Creator?
-  client  Client?
+  creator       Creator?
+  client        Client?
+  notifications Notification[]
 
   @@map("users")
 }
@@ -55,6 +105,7 @@ model Creator {
   bio             String?
   niches          String[]      @default([])
   socialHandles   Json?         @map("social_handles")
+  profilePicture  String?       @map("profile_picture")
   status          CreatorStatus @default(draft)
   rejectionReason String?       @map("rejection_reason")
   adminNotes      String?       @map("admin_notes")
@@ -62,7 +113,9 @@ model Creator {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shortlists  ShortlistCreator[]
+  invitations Invitation[]
 
   @@map("creators")
 }
@@ -79,10 +132,108 @@ model Client {
   contactPhone      String?     @map("contact_phone")
   country           String?
   officeAddress     String?     @map("office_address")
+  companyLogo       String?     @map("company_logo")
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
 
   @@map("clients")
+}
+
+model Campaign {
+  id               String         @id @default(uuid())
+  clientId         String         @map("client_id")
+  title            String
+  description      String?
+  platforms        String[]       @default([])
+  requirements     Json?
+  numberOfCreators Int?           @map("number_of_creators")
+  timeline         Json?
+  budget           Float?
+  status           CampaignStatus @default(draft)
+  coverImage       String?        @map("cover_image")
+  adminNotes       String?        @map("admin_notes")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  client             Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  statusLogs         CampaignStatusLog[]
+  shortlistedCreators ShortlistCreator[]
+  shareLinks         ShareLink[]
+  invitations        Invitation[]
+
+  @@map("campaigns")
+}
+
+model CampaignStatusLog {
+  id          String          @id @default(uuid())
+  campaignId  String          @map("campaign_id")
+  fromStatus  CampaignStatus? @map("from_status")
+  toStatus    CampaignStatus  @map("to_status")
+  note        String?
+  changedById String?         @map("changed_by_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("campaign_status_logs")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType @default(info)
+  title     String
+  message   String
+  isRead    Boolean          @default(false) @map("is_read")
+  metadata  Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model ShortlistCreator {
+  id         String   @id @default(uuid())
+  campaignId String   @map("campaign_id")
+  creatorId  String   @map("creator_id")
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creator  Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, creatorId])
+  @@map("shortlist_creators")
+}
+
+model ShareLink {
+  id         String    @id @default(uuid())
+  campaignId String    @map("campaign_id")
+  token      String    @unique @default(uuid())
+  expiresAt  DateTime  @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  decisions  Json?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("share_links")
+}
+
+model Invitation {
+  id         String           @id @default(uuid())
+  campaignId String           @map("campaign_id")
+  creatorId  String           @map("creator_id")
+  status     InvitationStatus @default(pending)
+  sentAt     DateTime         @default(now()) @map("sent_at")
+  respondedAt DateTime?       @map("responded_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creator  Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, creatorId])
+  @@map("invitations")
 }

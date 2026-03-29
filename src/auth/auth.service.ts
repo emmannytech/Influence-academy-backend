@@ -156,7 +156,17 @@ export class AuthService {
   }
 
   async changePassword(authUser: AuthenticatedUser, dto: ChangePasswordDto) {
+    // Verify current password by attempting sign-in
     const supabase = this.supabaseService.getAdminClient();
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: authUser.email,
+      password: dto.currentPassword,
+    });
+
+    if (signInError) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
     const { error } = await supabase.auth.admin.updateUserById(
       authUser.supabaseId,
       { password: dto.newPassword },

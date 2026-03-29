@@ -1,19 +1,25 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(Logger));
 
   app.setGlobalPrefix('api/v1');
 
   app.use(helmet());
 
+  const corsOrigin = process.env.CORS_ORIGIN;
+  if (process.env.NODE_ENV === 'production' && !corsOrigin) {
+    throw new Error('CORS_ORIGIN must be set in production');
+  }
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    origin: corsOrigin || 'http://localhost:5173',
     credentials: true,
   });
 
@@ -27,18 +33,20 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  // Swagger
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Influence Academy API')
-    .setDescription(
-      'Backend API for the Influence Academy influencer marketing platform',
-    )
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const documentFactory = () =>
-    SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, documentFactory);
+  // Swagger — disabled in production
+  if (process.env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Influence Academy API')
+      .setDescription(
+        'Backend API for the Influence Academy influencer marketing platform',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const documentFactory = () =>
+      SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, documentFactory);
+  }
 
   await app.listen(process.env.PORT ?? 3001);
 }

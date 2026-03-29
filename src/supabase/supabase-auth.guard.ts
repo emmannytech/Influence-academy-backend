@@ -48,12 +48,25 @@ export class SupabaseAuthGuard implements CanActivate {
         audience: 'authenticated',
       });
 
+      const role =
+        (payload.app_metadata as any)?.role ??
+        (payload.user_metadata as any)?.role;
+      const validRoles = ['creator', 'client', 'admin'];
+      if (!role || !validRoles.includes(role)) {
+        throw new UnauthorizedException(
+          'Invalid or missing user role in token',
+        );
+      }
+
       request.user = {
         supabaseId: payload.sub,
         email: payload.email as string,
-        role: (payload.app_metadata as any)?.role,
+        role,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Invalid or expired token');
     }
 

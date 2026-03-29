@@ -17,6 +17,16 @@ export class PaginationQueryDto {
 
   @IsOptional()
   @IsString()
+  @IsIn([
+    'createdAt',
+    'updatedAt',
+    'title',
+    'name',
+    'fullName',
+    'email',
+    'status',
+    'budget',
+  ])
   sortBy?: string;
 
   @IsOptional()
