@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { SupabaseService } from '../supabase/supabase.service';
 import { UsersService } from '../users/users.service';
@@ -13,9 +14,10 @@ const mockUsersService = {
 
 const mockSupabaseAdmin = {
   auth: {
+    signUp: jest.fn(),
     admin: {
-      createUser: jest.fn(),
       updateUserById: jest.fn(),
+      deleteUser: jest.fn(),
     },
     signInWithPassword: jest.fn(),
   },
@@ -23,6 +25,10 @@ const mockSupabaseAdmin = {
 
 const mockSupabaseService = {
   getAdminClient: jest.fn(() => mockSupabaseAdmin),
+};
+
+const mockConfigService = {
+  get: jest.fn((key: string, defaultValue?: string) => defaultValue),
 };
 
 describe('AuthService', () => {
@@ -34,12 +40,17 @@ describe('AuthService', () => {
         AuthService,
         { provide: SupabaseService, useValue: mockSupabaseService },
         { provide: UsersService, useValue: mockUsersService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     jest.clearAllMocks();
     mockSupabaseService.getAdminClient.mockReturnValue(mockSupabaseAdmin);
+    mockConfigService.get.mockImplementation((key: string) => {
+      if (key === 'FRONTEND_URL') return 'https://app.example.com';
+      return undefined;
+    });
   });
 
   describe('getMe', () => {
@@ -158,8 +169,11 @@ describe('AuthService', () => {
 
   describe('registerCreator', () => {
     it('should register a creator successfully', async () => {
-      mockSupabaseAdmin.auth.admin.createUser.mockResolvedValue({
-        data: { user: { id: 'supa-new' } },
+      mockSupabaseAdmin.auth.signUp.mockResolvedValue({
+        data: { user: { id: 'supa-new', identities: [{ id: '1' }] } },
+        error: null,
+      });
+      mockSupabaseAdmin.auth.admin.updateUserById.mockResolvedValue({
         error: null,
       });
       mockUsersService.createCreator.mockResolvedValue({ id: 'user-new' });
@@ -175,15 +189,46 @@ describe('AuthService', () => {
         message:
           'Registration successful. Please check your email to verify your account.',
       });
-      expect(mockSupabaseAdmin.auth.admin.createUser).toHaveBeenCalledWith({
+      expect(mockSupabaseAdmin.auth.signUp).toHaveBeenCalledWith({
         email: 'new@creator.com',
         password: 'P@ssword1',
-        email_confirm: false,
-        app_metadata: { role: 'creator' },
+        options: {
+          emailRedirectTo: 'https://app.example.com/verify-email',
+        },
       });
+      expect(mockSupabaseAdmin.auth.admin.updateUserById).toHaveBeenCalledWith(
+        'supa-new',
+        { app_metadata: { role: 'creator' } },
+      );
       expect(mockUsersService.createCreator).toHaveBeenCalledWith({
         supabaseId: 'supa-new',
         email: 'new@creator.com',
+      });
+    });
+
+    it('should use custom emailRedirectTo when provided', async () => {
+      mockSupabaseAdmin.auth.signUp.mockResolvedValue({
+        data: { user: { id: 'supa-new', identities: [{ id: '1' }] } },
+        error: null,
+      });
+      mockSupabaseAdmin.auth.admin.updateUserById.mockResolvedValue({
+        error: null,
+      });
+      mockUsersService.createCreator.mockResolvedValue({ id: 'user-new' });
+
+      await service.registerCreator({
+        email: 'new@creator.com',
+        password: 'P@ssword1',
+        confirmPassword: 'P@ssword1',
+        emailRedirectTo: 'https://myapp.com/verify-email',
+      });
+
+      expect(mockSupabaseAdmin.auth.signUp).toHaveBeenCalledWith({
+        email: 'new@creator.com',
+        password: 'P@ssword1',
+        options: {
+          emailRedirectTo: 'https://myapp.com/verify-email',
+        },
       });
     });
 
@@ -196,7 +241,22 @@ describe('AuthService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
 
-      expect(mockSupabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+      expect(mockSupabaseAdmin.auth.signUp).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when email already exists', async () => {
+      mockSupabaseAdmin.auth.signUp.mockResolvedValue({
+        data: { user: { id: 'supa-dup', identities: [] } },
+        error: null,
+      });
+
+      await expect(
+        service.registerCreator({
+          email: 'existing@creator.com',
+          password: 'P@ssword1',
+          confirmPassword: 'P@ssword1',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -211,7 +271,7 @@ describe('AuthService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
 
-      expect(mockSupabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+      expect(mockSupabaseAdmin.auth.signUp).not.toHaveBeenCalled();
     });
   });
 

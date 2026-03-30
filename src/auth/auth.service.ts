@@ -3,6 +3,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../supabase/supabase.service';
 import { UsersService } from '../users/users.service';
 import type { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
@@ -27,7 +28,12 @@ export class AuthService {
   constructor(
     private supabaseService: SupabaseService,
     private usersService: UsersService,
+    private configService: ConfigService,
   ) {}
+
+  private getEmailRedirectUrl(emailRedirectTo?: string): string {
+    return emailRedirectTo || '';
+  }
 
   async getMe(authUser: AuthenticatedUser) {
     const existing = await this.usersService.findBySupabaseId(
@@ -91,15 +97,35 @@ export class AuthService {
     }
 
     const supabase = this.supabaseService.getAdminClient();
-    const { data, error } = await supabase.auth.admin.createUser({
+    const redirectTo = this.getEmailRedirectUrl(dto.emailRedirectTo);
+
+    const { data, error } = await supabase.auth.signUp({
       email: dto.email,
       password: dto.password,
-      email_confirm: false,
-      app_metadata: { role: 'creator' },
+      options: {
+        emailRedirectTo: redirectTo,
+      },
     });
 
     if (error) {
       throw new BadRequestException(error.message);
+    }
+
+    if (!data.user || data.user.identities?.length === 0) {
+      throw new BadRequestException('A user with this email already exists');
+    }
+
+    // Set role in app_metadata via admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      data.user.id,
+      { app_metadata: { role: 'creator' } },
+    );
+
+    if (updateError) {
+      await supabase.auth.admin.deleteUser(data.user.id);
+      throw new InternalServerErrorException(
+        'Failed to configure user account',
+      );
     }
 
     const user = await this.usersService.createCreator({
@@ -126,16 +152,36 @@ export class AuthService {
     }
 
     const supabase = this.supabaseService.getAdminClient();
-    const { data, error } = await supabase.auth.admin.createUser({
+    const redirectTo = this.getEmailRedirectUrl(dto.emailRedirectTo);
+
+    const { data, error } = await supabase.auth.signUp({
       email: dto.email,
       password: dto.password,
-      email_confirm: false,
-      app_metadata: { role: 'client' },
-      user_metadata: { companyType: dto.companyType },
+      options: {
+        emailRedirectTo: redirectTo,
+        data: { companyType: dto.companyType },
+      },
     });
 
     if (error) {
       throw new BadRequestException(error.message);
+    }
+
+    if (!data.user || data.user.identities?.length === 0) {
+      throw new BadRequestException('A user with this email already exists');
+    }
+
+    // Set role in app_metadata via admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      data.user.id,
+      { app_metadata: { role: 'client' } },
+    );
+
+    if (updateError) {
+      await supabase.auth.admin.deleteUser(data.user.id);
+      throw new InternalServerErrorException(
+        'Failed to configure user account',
+      );
     }
 
     const companyType =

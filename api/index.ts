@@ -13,7 +13,19 @@ async function bootstrap() {
     app = await NestFactory.create(AppModule, { bufferLogs: true });
     app.useLogger(app.get(Logger));
     app.setGlobalPrefix('api/v1');
-    app.use(helmet());
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", 'cdn.jsdelivr.net'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'cdn.jsdelivr.net'],
+            imgSrc: ["'self'", 'data:', 'cdn.jsdelivr.net'],
+            connectSrc: ["'self'", 'cdn.jsdelivr.net'],
+          },
+        },
+      }),
+    );
     const corsOrigin =
       process.env.CORS_ORIGIN ||
       'http://localhost:5173,https://influence-academy-frontend.vercel.app';

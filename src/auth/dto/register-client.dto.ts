@@ -22,25 +22,33 @@ export enum ClientTypeDto {
 export class RegisterClientDto {
   @ApiProperty({ example: 'jane@brand.com' })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({ example: 'P@ssword1', minLength: 8 })
   @IsString()
   @MinLength(8)
   @Matches(PASSWORD_REGEX, { message: PASSWORD_MESSAGE })
-  password: string;
+  password!: string;
 
   @ApiProperty({ example: 'P@ssword1', minLength: 8 })
   @IsString()
   @MinLength(8)
-  confirmPassword: string;
+  confirmPassword!: string;
 
   @ApiProperty({ enum: ClientTypeDto, example: 'brand' })
   @IsEnum(ClientTypeDto)
-  companyType: ClientTypeDto;
+  companyType!: ClientTypeDto;
 
   @ApiPropertyOptional({ example: 'https://brand.com' })
   @IsOptional()
   @IsUrl()
   companyWebsite?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://example.com/verify-email',
+    description: 'URL to redirect to after email confirmation',
+  })
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  emailRedirectTo?: string;
 }
