@@ -2,6 +2,8 @@ import {
   Injectable,
   BadRequestException,
   InternalServerErrorException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -108,7 +110,7 @@ export class AuthService {
     });
 
     if (error) {
-      throw new BadRequestException(error.message);
+      this.handleSupabaseAuthError(error);
     }
 
     if (!data.user || data.user.identities?.length === 0) {
@@ -164,7 +166,7 @@ export class AuthService {
     });
 
     if (error) {
-      throw new BadRequestException(error.message);
+      this.handleSupabaseAuthError(error);
     }
 
     if (!data.user || data.user.identities?.length === 0) {
@@ -223,5 +225,15 @@ export class AuthService {
     }
 
     return { message: 'Password updated successfully' };
+  }
+
+  private handleSupabaseAuthError(error: { message: string }): never {
+    if (error.message.toLowerCase().includes('rate limit')) {
+      throw new HttpException(
+        'Too many requests. Please wait a few minutes before trying again.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    throw new BadRequestException(error.message);
   }
 }
