@@ -12,12 +12,14 @@ import { UpdateCampaignStatusDto } from './dto/update-campaign-status.dto';
 import { BulkCampaignStatusDto } from './dto/bulk-campaign-status.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { NotificationEvents } from '../notifications/notification-events';
+import { StorageService } from '../uploads/storage.service';
 
 @Injectable()
 export class AdminCampaignsService {
   constructor(
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
+    private storage: StorageService,
   ) {}
 
   async findAll(query: AdminCampaignQueryDto) {
@@ -73,12 +75,24 @@ export class AdminCampaignsService {
           select: { id: true, companyName: true, companyType: true },
         },
         statusLogs: { orderBy: { createdAt: 'asc' } },
+        assets: { orderBy: { uploadedAt: 'asc' } },
       },
     });
     if (!campaign) {
       throw new NotFoundException('Campaign not found');
     }
-    return campaign;
+
+    return {
+      ...campaign,
+      assets: campaign.assets.map((a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        url: this.storage.getPublicUrl('campaigns', a.storagePath),
+        mimeType: a.mimeType,
+        sizeBytes: a.sizeBytes,
+        uploadedAt: a.uploadedAt.toISOString(),
+      })),
+    };
   }
 
   async updateStatus(
