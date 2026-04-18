@@ -32,18 +32,6 @@ export class CreatorRequirementsDto {
   @Min(0)
   minFollowers?: number;
 
-  @ApiPropertyOptional({ example: 500 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  maxRate?: number;
-
-  @ApiPropertyOptional({ example: 2.5 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  minEngagement?: number;
-
   @ApiPropertyOptional({ example: 5000 })
   @IsOptional()
   @IsInt()
