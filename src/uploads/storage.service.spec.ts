@@ -120,4 +120,102 @@ describe('StorageService', () => {
       );
     });
   });
+
+  describe('uploadAsset', () => {
+    it('accepts PDF under 15 MB', async () => {
+      const file = {
+        mimetype: 'application/pdf',
+        size: 10 * 1024 * 1024,
+        originalname: 'brief.pdf',
+        buffer: Buffer.from('pdf'),
+      } as Express.Multer.File;
+
+      mockUpload.mockResolvedValue({ error: null });
+
+      const result = await service.uploadAsset('campaigns', file, 'camp-1');
+
+      expect(result.path).toMatch(/camp-1\/.+\.pdf$/);
+      expect(result.publicUrl).toContain('/storage/v1/object/public/campaigns/camp-1/');
+    });
+
+    it('accepts docx', async () => {
+      const file = {
+        mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 1024,
+        originalname: 'brief.docx',
+        buffer: Buffer.from('docx'),
+      } as Express.Multer.File;
+      mockUpload.mockResolvedValue({ error: null });
+
+      const result = await service.uploadAsset('campaigns', file, 'camp-1');
+
+      expect(result.path).toMatch(/\.docx$/);
+      expect(mockUpload).toHaveBeenCalledWith(
+        expect.any(String),
+        file.buffer,
+        expect.objectContaining({
+          contentType: file.mimetype,
+          upsert: false,
+        }),
+      );
+    });
+
+    it('accepts zip', async () => {
+      const file = {
+        mimetype: 'application/zip',
+        size: 1024,
+        originalname: 'pack.zip',
+        buffer: Buffer.from('zip'),
+      } as Express.Multer.File;
+      mockUpload.mockResolvedValue({ error: null });
+
+      const result = await service.uploadAsset('campaigns', file, 'camp-1');
+
+      expect(result.path).toMatch(/\.zip$/);
+      expect(mockUpload).toHaveBeenCalledWith(
+        expect.any(String),
+        file.buffer,
+        expect.objectContaining({
+          contentType: file.mimetype,
+          upsert: false,
+        }),
+      );
+    });
+
+    it('rejects executables', async () => {
+      const file = {
+        mimetype: 'application/x-msdownload',
+        size: 1024,
+        originalname: 'evil.exe',
+        buffer: Buffer.from('x'),
+      } as Express.Multer.File;
+      await expect(service.uploadAsset('campaigns', file, 'c')).rejects.toThrow(
+        /Invalid file type/,
+      );
+    });
+
+    it('rejects files over 15 MB', async () => {
+      const file = {
+        mimetype: 'application/pdf',
+        size: 16 * 1024 * 1024,
+        originalname: 'big.pdf',
+        buffer: Buffer.from('x'),
+      } as Express.Multer.File;
+      await expect(service.uploadAsset('campaigns', file, 'c')).rejects.toThrow(
+        /too large/i,
+      );
+    });
+
+    it('rejects files with no extension', async () => {
+      const file = {
+        mimetype: 'application/pdf',
+        size: 1024,
+        originalname: 'brief',
+        buffer: Buffer.from('x'),
+      } as Express.Multer.File;
+      await expect(service.uploadAsset('campaigns', file, 'c')).rejects.toThrow(
+        /missing a file extension/,
+      );
+    });
+  });
 });

@@ -18,6 +18,20 @@ const ALLOWED_IMAGE_TYPES = [
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
+const ALLOWED_ASSET_MIME = [
+  ...ALLOWED_IMAGE_TYPES,
+  'image/svg+xml',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'application/zip',
+  // legacy IE / older Windows alias for zip — kept for browser compatibility
+  'application/x-zip-compressed',
+];
+
+const MAX_ASSET_SIZE = 15 * 1024 * 1024; // 15 MB
+
 @Injectable()
 export class StorageService {
   private supabaseUrl: string;
@@ -34,24 +48,55 @@ export class StorageService {
     file: Express.Multer.File,
     folder?: string,
   ): Promise<UploadResult> {
-    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+    return this.uploadWithPolicy(bucket, file, folder, {
+      allowedMimes: ALLOWED_IMAGE_TYPES,
+      maxSize: MAX_FILE_SIZE,
+    });
+  }
+
+  async uploadAsset(
+    bucket: string,
+    file: Express.Multer.File,
+    folder?: string,
+  ): Promise<UploadResult> {
+    return this.uploadWithPolicy(bucket, file, folder, {
+      allowedMimes: ALLOWED_ASSET_MIME,
+      maxSize: MAX_ASSET_SIZE,
+    });
+  }
+
+  private async uploadWithPolicy(
+    bucket: string,
+    file: Express.Multer.File,
+    folder: string | undefined,
+    policy: {
+      allowedMimes: readonly string[];
+      maxSize: number;
+    },
+  ): Promise<UploadResult> {
+    if (!policy.allowedMimes.includes(file.mimetype)) {
       throw new BadRequestException(
-        `Invalid file type '${file.mimetype}'. Allowed: ${ALLOWED_IMAGE_TYPES.join(', ')}`,
+        `Invalid file type '${file.mimetype}'. Allowed: ${policy.allowedMimes.join(', ')}`,
       );
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > policy.maxSize) {
       throw new BadRequestException(
-        `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+        `File too large. Maximum size is ${policy.maxSize / (1024 * 1024)}MB`,
       );
     }
 
-    const ext = path.extname(file.originalname) || '.jpg';
+    const ext = path.extname(file.originalname);
+    if (!ext) {
+      throw new BadRequestException(
+        `File '${file.originalname}' is missing a file extension`,
+      );
+    }
+
     const fileName = `${randomUUID()}${ext}`;
     const filePath = folder ? `${folder}/${fileName}` : fileName;
 
     const client = this.supabaseService.getAdminClient();
-
     const { error } = await client.storage
       .from(bucket)
       .upload(filePath, file.buffer, {
@@ -64,7 +109,6 @@ export class StorageService {
     }
 
     const publicUrl = `${this.supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`;
-
     return { path: filePath, publicUrl };
   }
 
