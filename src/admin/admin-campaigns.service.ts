@@ -13,6 +13,7 @@ import { BulkCampaignStatusDto } from './dto/bulk-campaign-status.dto';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { NotificationEvents } from '../notifications/notification-events';
 import { StorageService } from '../uploads/storage.service';
+import { ASSETS_BUCKET } from '../campaigns/campaign-assets.service';
 
 @Injectable()
 export class AdminCampaignsService {
@@ -87,7 +88,7 @@ export class AdminCampaignsService {
       assets: campaign.assets.map((a) => ({
         id: a.id,
         fileName: a.fileName,
-        url: this.storage.getPublicUrl('campaigns', a.storagePath),
+        url: this.storage.getPublicUrl(ASSETS_BUCKET, a.storagePath),
         mimeType: a.mimeType,
         sizeBytes: a.sizeBytes,
         uploadedAt: a.uploadedAt.toISOString(),

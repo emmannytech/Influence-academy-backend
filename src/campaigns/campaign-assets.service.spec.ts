@@ -102,20 +102,18 @@ describe('CampaignAssetsService', () => {
         .rejects.toThrow(ForbiddenException);
     });
 
-    it('rejects when count would exceed 10', async () => {
+    it('rejects at or over the 10-asset limit without uploading', async () => {
       mockPrisma.client.findFirst.mockResolvedValue({ id: 'client-1' });
       mockPrisma.campaign.findUnique.mockResolvedValue({
         id: 'camp-1', clientId: 'client-1', status: 'draft',
       });
       mockPrisma.campaignAsset.count.mockResolvedValue(10);
-      mockStorage.uploadAsset.mockResolvedValue({
-        path: 'camp-1/abc.pdf', publicUrl: 'x',
-      });
-      mockStorage.delete.mockResolvedValue(undefined);
+
       await expect(service.uploadForClient('camp-1', 'supa', mockFile))
         .rejects.toThrow(ConflictException);
-      // Storage rollback must fire since upload happened before the count check
-      expect(mockStorage.delete).toHaveBeenCalledWith('campaigns', 'camp-1/abc.pdf');
+      // Pre-check bails before touching storage
+      expect(mockStorage.uploadAsset).not.toHaveBeenCalled();
+      expect(mockStorage.delete).not.toHaveBeenCalled();
     });
 
     it('cleans up storage if DB create fails', async () => {
@@ -177,19 +175,19 @@ describe('CampaignAssetsService', () => {
     it('returns assets for owner', async () => {
       mockPrisma.client.findFirst.mockResolvedValue({ id: 'client-1' });
       mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: 'camp-1', clientId: 'client-1', status: 'draft',
+        clientId: 'client-1',
+        assets: [
+          {
+            id: 'a1',
+            campaignId: 'camp-1',
+            fileName: 'brief.pdf',
+            storagePath: 'camp-1/abc.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 100,
+            uploadedAt: new Date(),
+          },
+        ],
       });
-      mockPrisma.campaignAsset.findMany.mockResolvedValue([
-        {
-          id: 'a1',
-          campaignId: 'camp-1',
-          fileName: 'brief.pdf',
-          storagePath: 'camp-1/abc.pdf',
-          mimeType: 'application/pdf',
-          sizeBytes: 100,
-          uploadedAt: new Date(),
-        },
-      ]);
       const result = await service.listForClient('camp-1', 'supa');
       expect(result).toHaveLength(1);
       expect(result[0].url).toContain('camp-1/abc.pdf');
@@ -198,9 +196,9 @@ describe('CampaignAssetsService', () => {
     it('returns empty array when no assets', async () => {
       mockPrisma.client.findFirst.mockResolvedValue({ id: 'client-1' });
       mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: 'camp-1', clientId: 'client-1', status: 'draft',
+        clientId: 'client-1',
+        assets: [],
       });
-      mockPrisma.campaignAsset.findMany.mockResolvedValue([]);
       await expect(service.listForClient('camp-1', 'supa')).resolves.toEqual([]);
     });
   });

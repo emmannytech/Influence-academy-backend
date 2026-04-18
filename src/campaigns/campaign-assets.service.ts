@@ -15,7 +15,8 @@ import {
 } from '@prisma/client';
 import { CampaignAssetResponseDto } from './dto/campaign-asset-response.dto';
 
-const BUCKET = 'campaigns';
+export const ASSETS_BUCKET = 'campaigns';
+const BUCKET = ASSETS_BUCKET;
 const MAX_ASSETS_PER_CAMPAIGN = 10;
 const EDITABLE_STATUSES: CampaignStatus[] = [
   CampaignStatus.draft,
@@ -98,6 +99,17 @@ export class CampaignAssetsService {
     const campaign = await this.ensureOwnedCampaign(campaignId, clientId);
     this.assertEditable(campaign.status);
 
+    // Fail fast on over-limit to avoid a wasted storage write. The authoritative
+    // count lives inside the serializable transaction below (TOCTOU guard).
+    const preCount = await this.prisma.campaignAsset.count({
+      where: { campaignId },
+    });
+    if (preCount >= MAX_ASSETS_PER_CAMPAIGN) {
+      throw new ConflictException(
+        `Asset limit reached: max ${MAX_ASSETS_PER_CAMPAIGN} per campaign`,
+      );
+    }
+
     const uploaded = await this.storage.uploadAsset(BUCKET, file, campaignId);
 
     try {
@@ -139,12 +151,20 @@ export class CampaignAssetsService {
     supabaseId: string,
   ): Promise<CampaignAssetResponseDto[]> {
     const clientId = await this.getClientId(supabaseId);
-    await this.ensureOwnedCampaign(campaignId, clientId);
 
-    const rows = await this.prisma.campaignAsset.findMany({
-      where: { campaignId },
-      orderBy: { uploadedAt: 'asc' },
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: {
+        clientId: true,
+        assets: { orderBy: { uploadedAt: 'asc' } },
+      },
     });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+    if (campaign.clientId !== clientId) {
+      throw new ForbiddenException('You do not own this campaign');
+    }
+
+    const rows = campaign.assets;
     return rows.map((r) => this.toDto(r));
   }
 
