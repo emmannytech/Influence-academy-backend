@@ -10,6 +10,7 @@ import type {
   MetricOverrideSubmittedPayload,
   MetricOverrideReviewedPayload,
 } from '../../notifications/notification-events';
+import type { CampaignPostSubmission, KpiType } from '@prisma/client';
 
 @Injectable()
 export class DeliverablesListener {
@@ -143,6 +144,10 @@ export class DeliverablesListener {
   }
 
   private async maybeFireCompleteEvent(campaignId: string): Promise<void> {
+    // Short-circuit: look up campaign owner and whether we've already fired this
+    // notification, in parallel. The idempotency check is the most common bail-out
+    // path (fires every time a post is approved on an already-complete campaign),
+    // so checking it up front saves four large queries in the common case.
     const campaign = await this.prisma.campaign.findUnique({
       where: { id: campaignId },
       select: {
@@ -152,6 +157,16 @@ export class DeliverablesListener {
       },
     });
     if (!campaign?.client?.user) return;
+
+    const existing = await this.prisma.notification.findFirst({
+      where: {
+        userId: campaign.client.user.id,
+        title: 'All deliverables complete',
+        metadata: { path: ['campaignId'], equals: campaignId },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
 
     const [targets, invitations, posts, overrides] = await Promise.all([
       this.prisma.campaignKpi.findMany({ where: { campaignId } }),
@@ -176,22 +191,12 @@ export class DeliverablesListener {
         }
         const sum = posts
           .filter((p) => p.creatorId === inv.creatorId)
-          .reduce((acc, p) => acc + (((p as unknown as Record<string, number | null>)[t.type] ?? 0) as number), 0);
+          .reduce((acc, p) => acc + (getPostMetric(p, t.type) ?? 0), 0);
         const ov = overrides.find((o) => o.creatorId === inv.creatorId && o.type === t.type);
         return sum + (ov?.reportedValue ?? 0) >= t.targetValue;
       }),
     );
     if (!allDone) return;
-
-    // Idempotency: skip if we've already fired for this campaign
-    const existing = await this.prisma.notification.findFirst({
-      where: {
-        userId: campaign.client.user.id,
-        title: 'All deliverables complete',
-        metadata: { path: ['campaignId'], equals: campaignId },
-      },
-    });
-    if (existing) return;
 
     await this.notifications.create({
       userId: campaign.client.user.id,
@@ -200,5 +205,20 @@ export class DeliverablesListener {
       message: `Every creator has hit their targets on "${campaign.title}".`,
       metadata: { campaignId },
     });
+  }
+}
+
+function getPostMetric(
+  post: CampaignPostSubmission,
+  type: KpiType,
+): number | null {
+  switch (type) {
+    case 'reach': return post.reach;
+    case 'impressions': return post.impressions;
+    case 'views': return post.views;
+    case 'engagement': return post.engagement;
+    case 'clicks': return post.clicks;
+    case 'conversions': return post.conversions;
+    case 'posts': return null;
   }
 }

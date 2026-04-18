@@ -214,9 +214,9 @@ export class CampaignDeliverablesService {
     supabaseId: string,
   ): Promise<CreatorDeliverablesBundleDto> {
     const creatorId = await this.getCreatorId(supabaseId);
-    await this.ensureAcceptedInvitation(campaignId, creatorId);
 
-    const [targets, posts, overrides] = await Promise.all([
+    const [, targets, posts, overrides] = await Promise.all([
+      this.ensureAcceptedInvitation(campaignId, creatorId),
       this.prisma.campaignKpi.findMany({
         where: { campaignId },
         select: { type: true, targetValue: true },
@@ -247,8 +247,10 @@ export class CampaignDeliverablesService {
     dto: SubmitPostDto,
   ): Promise<PostSubmissionDto> {
     const creatorId = await this.getCreatorId(supabaseId);
-    const campaign = await this.ensureActiveCampaign(campaignId);
-    await this.ensureAcceptedInvitation(campaignId, creatorId);
+    const [campaign] = await Promise.all([
+      this.ensureActiveCampaign(campaignId),
+      this.ensureAcceptedInvitation(campaignId, creatorId),
+    ]);
 
     const row = await this.prisma.campaignPostSubmission.create({
       data: {
@@ -331,8 +333,10 @@ export class CampaignDeliverablesService {
       );
     }
     const creatorId = await this.getCreatorId(supabaseId);
-    await this.ensureActiveCampaign(campaignId);
-    await this.ensureAcceptedInvitation(campaignId, creatorId);
+    await Promise.all([
+      this.ensureActiveCampaign(campaignId),
+      this.ensureAcceptedInvitation(campaignId, creatorId),
+    ]);
 
     const row = await this.prisma.campaignMetricOverride.upsert({
       where: {
