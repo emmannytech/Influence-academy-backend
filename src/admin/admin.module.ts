@@ -10,6 +10,7 @@ import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
 import { AdminSetupService } from './admin-setup.service';
 import { AdminSetupController } from './admin-setup.controller';
+import { AdminDeliverablesController } from './admin-deliverables.controller';
 import { CampaignsModule } from '../campaigns/campaigns.module';
 import { UploadsModule } from '../uploads/uploads.module';
 
@@ -22,6 +23,7 @@ import { UploadsModule } from '../uploads/uploads.module';
     AdminClientsController,
     AdminDashboardController,
     AdminSetupController,
+    AdminDeliverablesController,
   ],
   providers: [
     AdminCreatorsService,
