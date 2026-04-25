@@ -117,10 +117,13 @@ export class CreatorsService {
     if (!creator.email) missing.push('email');
 
     const handles = creator.socialHandles as Record<string, string> | null;
-    if (!handles?.instagram) missing.push('socialHandles.instagram');
-    if (!handles?.tiktok) missing.push('socialHandles.tiktok');
-    if (!handles?.x) missing.push('socialHandles.x');
-    if (!handles?.youtube) missing.push('socialHandles.youtube');
+    const hasAnyHandle = !!(
+      handles?.instagram?.trim() ||
+      handles?.tiktok?.trim() ||
+      handles?.x?.trim() ||
+      handles?.youtube?.trim()
+    );
+    if (!hasAnyHandle) missing.push('socialHandles');
 
     if (missing.length > 0) {
       throw new BadRequestException({
